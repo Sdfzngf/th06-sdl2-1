@@ -1,10 +1,29 @@
 # 東方紅魔郷 SDL2 移植版 / th06-sdl2
 
-> ⚠️ **归档通知 / Archived**
+> CNTianQi233/th06-sdl2的一个分支，修改了代码及编译脚本以更好适应在我使用的电脑的环境下的编译
 >
-> 由于作者精力有限,本项目进入归档期。作者不会持续维护这个项目,仅在有兴致时随缘处理。
+>> OS: CachyOS x86_64\
+>> 主板: 映泰H81MGC (5.0)\
+>> Kernel: Linux 7.0.11-1-cachyos-bore\
+>> CPU: Intel(R) Pentium(R) G3260 (2) @ 3.30 GHz\
+>> GPU: Intel Xeon E3-1200 v3/4th Gen Core Processor Integrated Graphics Controller @ 1.10 GHz 
 >
-> Due to limited bandwidth, this project is now in archive mode. The author will no longer actively maintain it and will only touch it occasionally when the mood strikes.
+> 由于这是我第一次尝试fork，可能操作完全不正确，以及一些必要的规范/声明可能有遗漏，如果有错误还请大家指出，我会积极修改的（附上我的邮箱sdfzngfxh@outlook.com）\
+> 在我的电脑上，可以使用如下的方法编译，如果行不通，请尝试原仓库的方法（https://github.com/CNTianQi233/th06-sdl2 ）
+> ```
+> sudo pacman -S lib32-sdl2 lib32-sdl2_image lib32-sdl2_mixer lib32-libgl lib32-gcc-libs
+> cd th06-sdl2
+> rm -rf build_linux_gles
+> PKG_CONFIG_PATH=/usr/lib32/pkgconfig \
+>     CFLAGS="-m32" \
+>     CXXFLAGS="-m32" \
+>     LDFLAGS="-m32 -L/usr/lib32" \
+>     cmake -B build_linux_gles -DCMAKE_BUILD_TYPE=Release \
+>       -DCMAKE_FIND_ROOT_PATH=/usr/lib32 \
+>       -DCMAKE_LIBRARY_PATH=/usr/lib32
+> cmake --build build_linux_gles --target th06
+> ```
+> 注意：使用了AI
 
 **[English](#english)** | **[中文](#中文)**
 

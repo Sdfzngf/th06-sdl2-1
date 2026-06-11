@@ -40,7 +40,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ============================================================================
 option(TH06_USE_SDL2 "使用 SDL2 作为平台后端" ON)
 option(TH06_BUILD_ORIGINAL "构建原始 D3D8/Win32 版本 (仅限 Windows)" OFF)
-option(TH06_ENABLE_PREDICTION_ROLLBACK "编译预测回滚联机代码" OFF)
+option(TH06_ENABLE_PREDICTION_ROLLBACK "编译预测回滚联机代码" ON)
 
 # ============================================================================
 # SDL2 查找
@@ -60,7 +60,7 @@ if(TH06_USE_SDL2)
     set(SDL2_IMAGE_DIR "${CMAKE_SOURCE_DIR}/3rdparty/SDL2_image")
     set(SDL2_MIXER_DIR "${CMAKE_SOURCE_DIR}/3rdparty/SDL2_mixer")
 
-    add_library(SDL2::SDL2 SHARED IMPORTED)
+    add_library(SDL2::SDL2 STATIC IMPORTED)
     set_target_properties(SDL2::SDL2 PROPERTIES
         IMPORTED_LOCATION "${SDL2_DIR}/lib/${SDL2_ARCH}/SDL2.dll"
         IMPORTED_IMPLIB   "${SDL2_DIR}/lib/${SDL2_ARCH}/SDL2.lib"
@@ -73,14 +73,14 @@ if(TH06_USE_SDL2)
         INTERFACE_INCLUDE_DIRECTORIES "${SDL2_DIR}/include"
     )
 
-    add_library(SDL2_image::SDL2_image SHARED IMPORTED)
+    add_library(SDL2_image::SDL2_image STATIC IMPORTED)
     set_target_properties(SDL2_image::SDL2_image PROPERTIES
         IMPORTED_LOCATION "${SDL2_IMAGE_DIR}/lib/${SDL2_ARCH}/SDL2_image.dll"
         IMPORTED_IMPLIB   "${SDL2_IMAGE_DIR}/lib/${SDL2_ARCH}/SDL2_image.lib"
         INTERFACE_INCLUDE_DIRECTORIES "${SDL2_IMAGE_DIR}/include"
     )
 
-    add_library(SDL2_mixer::SDL2_mixer SHARED IMPORTED)
+    add_library(SDL2_mixer::SDL2_mixer STATIC IMPORTED)
     set_target_properties(SDL2_mixer::SDL2_mixer PROPERTIES
         IMPORTED_LOCATION "${SDL2_MIXER_DIR}/lib/${SDL2_ARCH}/SDL2_mixer.dll"
         IMPORTED_IMPLIB   "${SDL2_MIXER_DIR}/lib/${SDL2_ARCH}/SDL2_mixer.lib"
@@ -94,19 +94,49 @@ if(TH06_USE_SDL2)
   else()
     # Linux/macOS: 通过 pkg-config 查找系统安装的 SDL2
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
-    pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image)
-    pkg_check_modules(SDL2_MIXER REQUIRED IMPORTED_TARGET SDL2_mixer)
 
-    # 创建兼容的 target 别名
-    if(NOT TARGET SDL2::SDL2)
-        add_library(SDL2::SDL2 ALIAS PkgConfig::SDL2)
-    endif()
-    if(NOT TARGET SDL2_image::SDL2_image)
-        add_library(SDL2_image::SDL2_image ALIAS PkgConfig::SDL2_IMAGE)
-    endif()
-    if(NOT TARGET SDL2_mixer::SDL2_mixer)
-        add_library(SDL2_mixer::SDL2_mixer ALIAS PkgConfig::SDL2_MIXER)
+    # On Arch/CachyOS with multilib, SDL2 is provided by lib32-sdl2-compat,
+    # and the .pc files may have different names or locations. First try the
+    # standard module names, then fall back to compat names.
+    set(_SDL2_MODULES sdl2 SDL2_image SDL2_mixer)
+    set(_SDL2_TARGETS  SDL2::SDL2 SDL2_image::SDL2_image SDL2_mixer::SDL2_mixer)
+    set(_SDL2_FALLBACK_MODULES sdl2-compat SDL2_image SDL2_mixer)
+
+    # Try primary module names first
+    set(_found_modules TRUE)
+    foreach(_mod sdl2 SDL2_image SDL2_mixer)
+        pkg_check_modules(${_mod} QUIET IMPORTED_TARGET ${_mod})
+        string(TOUPPER ${_mod} _mod_upper)
+        if(NOT ${_mod_upper}_FOUND)
+            set(_found_modules FALSE)
+        endif()
+    endforeach()
+
+    if(_found_modules)
+        # Primary modules found
+        if(NOT TARGET SDL2::SDL2)
+            add_library(SDL2::SDL2 ALIAS PkgConfig::SDL2)
+        endif()
+        if(NOT TARGET SDL2_image::SDL2_image)
+            add_library(SDL2_image::SDL2_image ALIAS PkgConfig::SDL2_IMAGE)
+        endif()
+        if(NOT TARGET SDL2_mixer::SDL2_mixer)
+            add_library(SDL2_mixer::SDL2_mixer ALIAS PkgConfig::SDL2_MIXER)
+        endif()
+    else()
+        # Fallback: try with compat module names (Arch Linux sdl2-compat)
+        pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2-compat)
+        pkg_check_modules(SDL2_IMAGE REQUIRED IMPORTED_TARGET SDL2_image)
+        pkg_check_modules(SDL2_MIXER REQUIRED IMPORTED_TARGET SDL2_mixer)
+        if(NOT TARGET SDL2::SDL2)
+            add_library(SDL2::SDL2 ALIAS PkgConfig::SDL2)
+        endif()
+        if(NOT TARGET SDL2_image::SDL2_image)
+            add_library(SDL2_image::SDL2_image ALIAS PkgConfig::SDL2_IMAGE)
+        endif()
+        if(NOT TARGET SDL2_mixer::SDL2_mixer)
+            add_library(SDL2_mixer::SDL2_mixer ALIAS PkgConfig::SDL2_MIXER)
+        endif()
     endif()
 
     # Linux 不需要 SDL2main
@@ -246,10 +276,8 @@ set(TH06_GAME_SOURCES
     # ImGui SDL2+OpenGL2 后端
     3rdparty/imgui/imgui_impl_sdl.cpp
     3rdparty/imgui/imgui_impl_opengl2.cpp
-    # Phase 5b.2: ImGui Vulkan backend (always built; gated at runtime via IsUsingVulkan).
-    # imgui_impl_vulkan.cpp pulls vulkan.h after volk.h has set VK_NO_PROTOTYPES,
-    # so it auto-switches to its own dispatch table populated via LoadFunctions().
-    3rdparty/imgui/imgui_impl_vulkan.cpp
+    # Phase 5b.2: ImGui Vulkan backend (only built when Vulkan is enabled).
+    # Guarded by TH06_USE_VULKAN; see the Vulkan backend section below.
 )
 
 # Always compile both renderers and both ImGui GL backends for runtime switching
@@ -580,6 +608,8 @@ if(TH06_USE_VULKAN)
     # --- 6. Phase 5b: link Vulkan sources into main th06 game target so
     # `--backend=vulkan` actually creates RendererVulkan at runtime.
     target_sources(th06 PRIVATE ${TH06_VULKAN_SOURCES} ${CMAKE_SOURCE_DIR}/src/RendererVulkan.cpp)
+    # Phase 5b.2: ImGui Vulkan backend (only when Vulkan is enabled)
+    target_sources(th06 PRIVATE ${CMAKE_SOURCE_DIR}/3rdparty/imgui/imgui_impl_vulkan.cpp)
     target_include_directories(th06 PRIVATE
         ${Vulkan_INCLUDE_DIR}
         ${TH06_VULKAN_VMA_DIR}

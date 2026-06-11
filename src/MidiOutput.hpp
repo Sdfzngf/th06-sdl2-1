@@ -5,8 +5,7 @@
 #include "inttypes.hpp"
 #include "sdl2_compat.hpp"
 
-struct _Mix_Music;
-typedef struct _Mix_Music Mix_Music;
+#include <SDL_mixer.h>
 
 namespace th06
 {

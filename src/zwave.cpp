@@ -513,7 +513,14 @@ HRESULT CWaveFile::OpenAsync(char *strFileName)
         SDL_RWops *probe = AssetIO::OpenRW(oggPath);
         if (probe == NULL)
         {
-            utils::DebugPrint2("[OGG/async] no sibling .ogg for %s\n", jobData->path);
+            utils::DebugPrint2("[OGG/async] no sibling .ogg for %s, falling back to WAV\n", jobData->path);
+            // Fall back to the original WAV file
+            probe = AssetIO::OpenRW(jobData->path);
+        }
+
+        if (probe == NULL)
+        {
+            utils::DebugPrint2("[OGG/async] cannot open %s\n", jobData->path);
             jobData->state.store(2, std::memory_order_release);
             return;
         }
@@ -521,8 +528,8 @@ HRESULT CWaveFile::OpenAsync(char *strFileName)
         Mix_Chunk *chunk = Mix_LoadWAV_RW(probe, 1);
         if (chunk == NULL || chunk->abuf == NULL || chunk->alen == 0)
         {
-            utils::DebugPrint2("[OGG/async] decode failed for %s: %s\n", oggPath,
-                               chunk == NULL ? Mix_GetError() : "(empty)");
+            const char *err = chunk == NULL ? Mix_GetError() : "(empty)";
+            utils::DebugPrint2("[OGG/async] decode failed for %s: %s\n", oggPath, err);
             if (chunk != NULL)
                 Mix_FreeChunk(chunk);
             jobData->state.store(2, std::memory_order_release);
@@ -598,4 +605,3 @@ HRESULT CWaveFile::ResetFile(bool loop)
 }
 
 }; // namespace th06
-

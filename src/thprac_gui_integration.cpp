@@ -14,7 +14,13 @@
 #endif
 // Phase 5b.2: Vulkan ImGui owned by RendererVulkan.
 #include "IRenderer.hpp"
+#ifndef TH06_USE_VULKAN
+// Forward declarations so GLES builds don't need Vulkan headers.
+namespace th06 { class RendererVulkan; }
+#endif
+#if defined(TH06_USE_VULKAN)
 #include "RendererVulkan.hpp"
+#endif
 #include <SDL.h>
 #include <cstdio>
 
@@ -44,6 +50,7 @@ void THPracGuiInit(SDL_Window* window, void* glContext)
     // lifecycle (LoadFunctions / Init / font upload / DescriptorPool / Shutdown).
     // We still need ImGui_ImplSDL2_InitForVulkan to wire up event/clipboard/etc.,
     // which RendererVulkan::InitImGui handles internally.
+#if defined(TH06_USE_VULKAN)
     const bool useVulkan = th06::IsUsingVulkan();
     if (useVulkan) {
         std::fprintf(stderr, "[thprac] useVulkan=1 g_Renderer=%p GetRendererVulkan()=%p\n",
@@ -54,7 +61,9 @@ void THPracGuiInit(SDL_Window* window, void* glContext)
             ImGui::DestroyContext();
             return;
         }
-    } else {
+    } else
+#endif
+    {
         ImGui_ImplSDL2_InitForOpenGL(window, glContext);
 #if defined(TH06_USE_GLES)
         ImGui_ImplOpenGL3_Init();
@@ -234,10 +243,13 @@ void THPracGuiShutdown()
 
     if (s_headless) {
         // Headless init only created the ImGui context (no SDL2 / GL backend).
-    } else if (th06::IsUsingVulkan() && th06::g_Renderer) {
-        // Phase 5b.2: RendererVulkan owns ImplVulkan + ImplSDL2 lifecycle.
-        static_cast<th06::RendererVulkan*>(th06::GetRendererVulkan())->ShutdownImGui();
     } else {
+#if defined(TH06_USE_VULKAN)
+        if (th06::IsUsingVulkan() && th06::g_Renderer) {
+            // Phase 5b.2: RendererVulkan owns ImplVulkan + ImplSDL2 lifecycle.
+            static_cast<th06::RendererVulkan*>(th06::GetRendererVulkan())->ShutdownImGui();
+        } else
+#endif
 #if defined(TH06_USE_GLES)
         ImGui_ImplOpenGL3_Shutdown();
 #else
